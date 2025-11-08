@@ -1,7 +1,12 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { RobotIcon } from '../icons/Icons';
 import Card from '../ui/Card';
-import { getChatbotResponseStream } from '../../services/geminiService';
+import { createChatSession } from '../../services/geminiService';
+import { useAppContext } from '../../hooks/useAppContext';
+import { ProductStatus } from '../../types';
+import { Type, Chat, FunctionDeclaration, Part } from '@google/genai';
+
 
 interface Message {
     text: string;
@@ -13,65 +18,180 @@ const Chatbot: React.FC = () => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [chat, setChat] = useState<Chat | null>(null);
+
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const { products, bots } = useAppContext();
+    const navigate = useNavigate();
+
+    // === Define Tool Functions ===
+    const tools: FunctionDeclaration[] = useMemo(() => [
+        {
+            name: 'navigate_to_page',
+            description: 'Navigate to a specific page in the application.',
+            parameters: {
+                type: Type.OBJECT,
+                properties: {
+                    page: {
+                        type: Type.STRING,
+                        description: 'The destination page. Must be one of: "dashboard", "inventory", "demand-forecast", "bot-control", "reports", "settings".',
+                    },
+                },
+                required: ['page'],
+            },
+        },
+        {
+            name: 'get_inventory_summary',
+            description: 'Get a summary of the current inventory status.',
+            parameters: { type: Type.OBJECT, properties: {} }
+        },
+        {
+            name: 'find_low_stock_items',
+            description: 'Get a list of all products that are low in stock.',
+            parameters: { type: Type.OBJECT, properties: {} }
+        },
+        {
+            name: 'get_bot_status',
+            description: 'Gets the status of one or all warehouse bots.',
+            parameters: {
+                type: Type.OBJECT,
+                properties: {
+                    bot_id: {
+                        type: Type.STRING,
+                        description: 'The ID of the bot, e.g., "BOT-01". If omitted, returns status for all bots.'
+                    },
+                },
+            }
+        },
+    ], []);
+
+
+    const toolFunctions = useMemo(() => ({
+        navigate_to_page: ({ page }: { page: string }) => {
+            const pathMap: { [key: string]: string } = {
+                'dashboard': '/', 'home': '/',
+                'inventory': '/inventory',
+                'demand-forecast': '/demand-forecast', 'demand': '/demand-forecast', 'forecast': '/demand-forecast',
+                'bot-control': '/bot-control', 'bots': '/bot-control',
+                'reports': '/reports',
+                'settings': '/settings',
+            };
+            const path = pathMap[page.toLowerCase()];
+            if (path) {
+                navigate(path);
+                return { success: `Navigated to ${page}.` };
+            }
+            return { error: `Could not find the page: ${page}.` };
+        },
+        get_inventory_summary: () => {
+            const totalItems = products.length;
+            const inStock = products.filter(p => p.status === ProductStatus.InStock).length;
+            const lowStock = products.filter(p => p.status === ProductStatus.LowStock).length;
+            const outOfStock = products.filter(p => p.status === ProductStatus.OutOfStock).length;
+            return { totalItems, inStock, lowStock, outOfStock };
+        },
+        find_low_stock_items: () => {
+            const lowStockItems = products
+                .filter(p => p.status === ProductStatus.LowStock)
+                .map(p => ({ id: p.id, name: p.name, quantity: p.quantity }));
+            return { lowStockItems };
+        },
+        get_bot_status: ({ bot_id }: { bot_id?: string }) => {
+            const botsToReport = bot_id ? bots.filter(b => b.id.toLowerCase() === bot_id.toLowerCase()) : bots;
+            if (botsToReport.length === 0) return { error: `Bot with ID ${bot_id} not found.` };
+            
+            const report = botsToReport.map(b => ({
+                id: b.id,
+                status: b.status,
+                battery: `${b.battery}%`,
+                location: b.location,
+                currentTask: b.currentTask || 'None'
+            }));
+            return { bots: report };
+        }
+    }), [navigate, products, bots]);
+    
+    // Initialize chat session
+    useEffect(() => {
+        if(isOpen && !chat) {
+            setChat(createChatSession(tools));
+        }
+    }, [isOpen, chat, tools]);
+
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
-
     useEffect(scrollToBottom, [messages]);
-
-    const getInitialMessage = useCallback(async () => {
-        if (messages.length > 0 || !isOpen) return;
-        setIsLoading(true);
-        setMessages([{ text: '', sender: 'ai' }]);
-        try {
-            const stream = await getChatbotResponseStream("Hello");
-            for await (const chunk of stream) {
-                setMessages(prev => {
-                    const newMessages = [...prev];
-                    newMessages[newMessages.length - 1].text += chunk.text;
-                    return newMessages;
-                });
-            }
-        } catch (error) {
-            setMessages([{ text: "Sorry, I'm having trouble connecting. Please try again later.", sender: 'ai' }]);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [messages.length, isOpen]);
-
-    useEffect(() => {
-        if (isOpen) {
-            getInitialMessage();
-        }
-    }, [isOpen, getInitialMessage]);
 
 
     const handleSend = async () => {
-        if (input.trim() === '' || isLoading) return;
+        if (input.trim() === '' || isLoading || !chat) return;
 
         const userMessage: Message = { text: input, sender: 'user' };
-        setMessages(prev => [...prev, userMessage, { text: '', sender: 'ai' }]);
+        setMessages(prev => [...prev, userMessage]);
         const currentInput = input;
         setInput('');
         setIsLoading(true);
 
         try {
-            const stream = await getChatbotResponseStream(currentInput);
+            let stream = await chat.sendMessageStream({ message: currentInput });
+
+            let text = '';
+            let functionCalls: any[] = [];
+
             for await (const chunk of stream) {
-                setMessages(prev => {
-                    const newMessages = [...prev];
-                    newMessages[newMessages.length - 1].text += chunk.text;
-                    return newMessages;
-                });
+                 if (chunk.functionCalls) {
+                    functionCalls.push(...chunk.functionCalls);
+                }
+                text += chunk.text;
             }
+
+            if (functionCalls.length > 0) {
+                setMessages(prev => [...prev, { text: text || 'Thinking...', sender: 'ai' }]);
+
+                const toolResponses: { id: string; name: string; response: any; }[] = [];
+                for (const call of functionCalls) {
+                    const toolFunction = (toolFunctions as any)[call.name];
+                    if (toolFunction) {
+                        const result = await Promise.resolve(toolFunction(call.args));
+                        toolResponses.push({
+                            id: call.id,
+                            name: call.name,
+                            response: result,
+                        });
+                    }
+                }
+                
+                const functionResponseParts: Part[] = toolResponses.map(
+                  (toolResponse) => ({
+                    functionResponse: {
+                      name: toolResponse.name,
+                      response: toolResponse.response,
+                    },
+                  })
+                );
+                
+                stream = await chat.sendMessageStream({ message: functionResponseParts });
+                
+                // Start a new AI message for the final response
+                setMessages(prev => [...prev, { text: '', sender: 'ai' }]);
+                for await (const chunk of stream) {
+                    setMessages(prev => {
+                        const newMessages = [...prev];
+                        newMessages[newMessages.length-1].text += chunk.text;
+                        return newMessages;
+                    });
+                }
+
+            } else {
+                // No function calls, just stream the text response
+                setMessages(prev => [...prev, { text: text, sender: 'ai' }]);
+            }
+
         } catch (error) {
-            setMessages(prev => {
-                const newMessages = [...prev];
-                newMessages[newMessages.length - 1].text = "Sorry, I encountered an error. Please try again.";
-                return newMessages;
-            });
+            console.error("Chatbot error:", error);
+            setMessages(prev => [...prev, { text: "Sorry, I encountered an error. Please try again.", sender: 'ai' }]);
         } finally {
             setIsLoading(false);
         }

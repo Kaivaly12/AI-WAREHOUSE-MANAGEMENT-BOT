@@ -1,20 +1,39 @@
 
-import React, { useState, useEffect } from 'react';
-import { ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
-import Card from '../components/ui/Card';
-import { getMarketPrediction } from '../services/geminiService';
-import { STOCK_UTILIZATION_DATA, CATEGORY_DISTRIBUTION_DATA, DEMAND_STOCK_RATIO_DATA } from '../constants';
-import type { ChartData } from '../types';
+import React, { useMemo } from 'react';
+import { 
+    ResponsiveContainer, 
+    LineChart, 
+    Line, 
+    BarChart, 
+    Bar, 
+    XAxis, 
+    YAxis, 
+    Tooltip, 
+    Legend, 
+    CartesianGrid,
+    PieChart,
+    Pie,
+    Cell
+} from 'recharts';
+import Card, { ScrollAnimator } from '../components/ui/Card';
+import { STOCK_UTILIZATION_DATA, CATEGORY_DISTRIBUTION_DATA } from '../constants';
+import { TagIcon, CpuIcon, TrendingUpIcon, AlertTriangleIcon } from '../components/icons/Icons';
+import { useAppContext } from '../hooks/useAppContext';
+import { ProductStatus, BotStatus } from '../types';
+import AIInsightPanel from '../components/dashboard/AIInsightPanel';
+import LiveNotificationFeed from '../components/dashboard/LiveNotificationFeed';
 
-const KpiCard: React.FC<{ title: string; value: string; icon: string; change?: string; changeType?: 'increase' | 'decrease' }> = ({ title, value, icon, change, changeType }) => (
+
+const KpiCard: React.FC<{ title: string; value: string; icon: React.ElementType; change?: string; changeType?: 'increase' | 'decrease' }> = ({ title, value, icon: Icon, change, changeType }) => (
     <Card>
         <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</p>
-            <span className="text-2xl">{icon}</span>
+            <Icon className="w-6 h-6 text-gray-400 dark:text-gray-500" />
         </div>
         <p className="text-3xl font-bold mt-2 text-gray-800 dark:text-white">{value}</p>
         {change && (
-            <p className={`text-sm mt-1 ${changeType === 'increase' ? 'text-neon-green' : 'text-red-500'}`}>
+            <p className={`text-sm mt-1 flex items-center gap-1 ${changeType === 'increase' ? 'text-neon-green' : 'text-red-500'}`}>
+                {changeType === 'increase' ? '▲' : '▼'}
                 {change} vs last month
             </p>
         )}
@@ -22,90 +41,95 @@ const KpiCard: React.FC<{ title: string; value: string; icon: string; change?: s
 );
 
 const DashboardPage: React.FC = () => {
-    const [aiInsight, setAiInsight] = useState("Loading AI prediction...");
+    const { products, bots } = useAppContext();
 
-    useEffect(() => {
-        getMarketPrediction().then(setAiInsight);
-    }, []);
+    const pieData = useMemo(() => {
+        const statusCounts = {
+            [ProductStatus.InStock]: products.filter(p => p.status === ProductStatus.InStock).length,
+            [ProductStatus.LowStock]: products.filter(p => p.status === ProductStatus.LowStock).length,
+            [ProductStatus.OutOfStock]: products.filter(p => p.status === ProductStatus.OutOfStock).length,
+        };
+        return [
+            { name: 'In Stock', value: statusCounts[ProductStatus.InStock] },
+            { name: 'Low Stock', value: statusCounts[ProductStatus.LowStock] },
+            { name: 'Out of Stock', value: statusCounts[ProductStatus.OutOfStock] },
+        ];
+    }, [products]);
 
-    const notifications = [
-        "Bot 03 restocked Item #45 (Ionic Power Cells).",
-        "Low stock alert for Hydrogel Packs (45 units left).",
-        "Maintenance scheduled for Bot 05 at 3:00 PM.",
-        "New shipment from SynthCore received and processed.",
-    ];
+    const COLORS = ['#00ff87', '#facc15', '#ef4444'];
+
 
     return (
         <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <KpiCard title="Total Stock Value" value="₹10 Cr" icon="🏷️" change="+5.2%" changeType="increase" />
-                <KpiCard title="Active Warehouse Bots" value="6 / 8" icon="⚙️" />
-                <KpiCard title="Predicted Demand" value="+12%" icon="📊" change="+2.1%" changeType="increase" />
-                <KpiCard title="Out-of-Stock Alerts" value="1" icon="🚨" />
-            </div>
+            <ScrollAnimator>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <KpiCard title="Total Stock Value" value="₹10 Cr" icon={TagIcon} change="+5.2%" changeType="increase" />
+                    <KpiCard title="Active Warehouse Bots" value={`${bots.filter(b => b.status === BotStatus.Active).length} / ${bots.length}`} icon={CpuIcon} />
+                    <KpiCard title="Predicted Demand" value="+12%" icon={TrendingUpIcon} change="+2.1%" changeType="increase" />
+                    <KpiCard title="Out-of-Stock Alerts" value={products.filter(p => p.status === ProductStatus.OutOfStock).length.toString()} icon={AlertTriangleIcon} />
+                </div>
+            </ScrollAnimator>
+            
+            <ScrollAnimator delay={150}>
+                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <AIInsightPanel />
+                    <Card>
+                        <h3 className="font-bold text-lg mb-4 text-center">Stock Status Distribution</h3>
+                        <ResponsiveContainer width="100%" height={150}>
+                            <PieChart>
+                                <Pie
+                                    data={pieData}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={45}
+                                    outerRadius={65}
+                                    fill="#8884d8"
+                                    paddingAngle={5}
+                                    dataKey="value"
+                                >
+                                    {pieData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                </Pie>
+                                <Tooltip contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: '0.5rem' }} />
+                                <Legend iconSize={10} wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </Card>
+                    <LiveNotificationFeed />
+                </div>
+            </ScrollAnimator>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <Card className="lg:col-span-2">
-                    <h3 className="font-bold text-lg mb-4">Stock Utilization Trend (6 Months)</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <LineChart data={STOCK_UTILIZATION_DATA}>
-                            <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
-                            <XAxis dataKey="name" />
-                            <YAxis />
-                            <Tooltip contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: '0.5rem' }} />
-                            <Legend />
-                            <Line type="monotone" dataKey="value" stroke="#00f6ff" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 8 }} />
-                        </LineChart>
-                    </ResponsiveContainer>
-                </Card>
-                <Card>
-                     <h3 className="font-bold text-lg mb-4">AI Insight Panel</h3>
-                     <div className="bg-neon-blue/10 p-4 rounded-lg border border-neon-blue/30 h-full flex flex-col justify-center">
-                        <p className="text-sm font-semibold text-neon-blue mb-2">Market Prediction Summary</p>
-                        <p className="text-gray-800 dark:text-gray-200">{aiInsight}</p>
-                     </div>
-                </Card>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                <Card className="lg:col-span-2">
-                    <h3 className="font-bold text-lg mb-4">Category-wise Distribution</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={CATEGORY_DISTRIBUTION_DATA} layout="vertical">
-                            <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
-                            <XAxis type="number" hide />
-                            <YAxis type="category" dataKey="name" width={80} tickLine={false} axisLine={false} />
-                            <Tooltip cursor={{fill: 'rgba(255,255,255,0.1)'}} contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: '0.5rem' }} />
-                            <Bar dataKey="value" fill="#00ff87" barSize={20} />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </Card>
-                <Card className="lg:col-span-1">
-                    <h3 className="font-bold text-lg mb-4">Demand vs Stock</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <PieChart>
-                            <Pie data={DEMAND_STOCK_RATIO_DATA} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label>
-                                {DEMAND_STOCK_RATIO_DATA.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.fill} />
-                                ))}
-                            </Pie>
-                            <Tooltip contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: '0.5rem' }}/>
-                            <Legend />
-                        </PieChart>
-                    </ResponsiveContainer>
-                </Card>
-                <Card className="lg:col-span-2">
-                    <h3 className="font-bold text-lg mb-4">Live Notification Feed</h3>
-                    <div className="space-y-3">
-                        {notifications.map((note, index) => (
-                            <div key={index} className="flex items-start gap-3">
-                                <div className="mt-1 w-2 h-2 rounded-full bg-neon-blue shrink-0"></div>
-                                <p className="text-sm text-gray-600 dark:text-gray-300">{note}</p>
-                            </div>
-                        ))}
-                    </div>
-                </Card>
-            </div>
+            <ScrollAnimator delay={300}>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <Card>
+                        <h3 className="font-bold text-lg mb-4">Stock Utilization Trend (6 Months)</h3>
+                        <ResponsiveContainer width="100%" height={300}>
+                            <LineChart data={STOCK_UTILIZATION_DATA}>
+                                <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
+                                <XAxis dataKey="name" />
+                                <YAxis />
+                                <Tooltip contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: '0.5rem' }} />
+                                <Legend />
+                                <Line type="monotone" dataKey="value" stroke="#00f6ff" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 8 }} />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </Card>
+                    <Card>
+                        <h3 className="font-bold text-lg mb-4">Category-wise Distribution</h3>
+                        <ResponsiveContainer width="100%" height={300}>
+                            <BarChart data={CATEGORY_DISTRIBUTION_DATA}>
+                                <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
+                                <XAxis dataKey="name" />
+                                <YAxis />
+                                <Tooltip cursor={{fill: 'rgba(255,255,255,0.1)'}} contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: '0.5rem' }} />
+                                <Legend/>
+                                <Bar dataKey="value" fill="#00ff87" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </Card>
+                </div>
+            </ScrollAnimator>
         </div>
     );
 };

@@ -14,14 +14,36 @@ export const MOCK_PRODUCTS: Product[] = [
 ];
 
 export const MOCK_BOTS: Bot[] = [
-    { id: 'BOT-01', status: BotStatus.Active, battery: 88, tasksCompleted: 142, location: 'Aisle 7' },
-    { id: 'BOT-02', status: BotStatus.Idle, battery: 95, tasksCompleted: 110, location: 'Docking Bay' },
-    { id: 'BOT-03', status: BotStatus.Charging, battery: 23, tasksCompleted: 98, location: 'Charging Station 2' },
-    { id: 'BOT-04', status: BotStatus.Active, battery: 76, tasksCompleted: 158, location: 'Aisle 3' },
-    { id: 'BOT-05', status: BotStatus.Maintenance, battery: 100, tasksCompleted: 55, location: 'Maintenance Bay' },
-    { id: 'BOT-06', status: BotStatus.Active, battery: 91, tasksCompleted: 130, location: 'Packing Area' },
-    { id: 'BOT-07', status: BotStatus.Idle, battery: 98, tasksCompleted: 102, location: 'Docking Bay' },
-    { id: 'BOT-08', status: BotStatus.Charging, battery: 45, tasksCompleted: 121, location: 'Charging Station 1' },
+    { id: 'BOT-01', status: BotStatus.Active, battery: 88, tasksCompleted: 142, location: 'Aisle 7', history: [
+        { timestamp: new Date(Date.now() - 3600000).toISOString(), event: 'Task completed: Pick Item - PID-004' },
+        { timestamp: new Date(Date.now() - 7200000).toISOString(), event: 'Status changed to Active.' },
+    ]},
+    { id: 'BOT-02', status: BotStatus.Idle, battery: 95, tasksCompleted: 110, location: 'Docking Bay', history: [
+        { timestamp: new Date(Date.now() - 1800000).toISOString(), event: 'Returned to Docking Bay.' },
+        { timestamp: new Date(Date.now() - 9000000).toISOString(), event: 'System restart initiated.' },
+    ]},
+    { id: 'BOT-03', status: BotStatus.Charging, battery: 23, tasksCompleted: 98, location: 'Charging Station 2', history: [
+        { timestamp: new Date(Date.now() - 600000).toISOString(), event: 'Low battery detected. Moving to charge.' },
+        { timestamp: new Date(Date.now() - 4800000).toISOString(), event: 'Task completed: Deliver Item - Packing Area' },
+    ]},
+    { id: 'BOT-04', status: BotStatus.Active, battery: 76, tasksCompleted: 158, location: 'Aisle 3', history: [
+        { timestamp: new Date(Date.now() - 2400000).toISOString(), event: 'Task assigned: Scan Shelf - Aisle 3' },
+        { timestamp: new Date(Date.now() - 5400000).toISOString(), event: 'Activated from Idle state.' },
+    ]},
+    { id: 'BOT-05', status: BotStatus.Maintenance, battery: 100, tasksCompleted: 55, location: 'Maintenance Bay', history: [
+         { timestamp: new Date(Date.now() - 86400000).toISOString(), event: 'Scheduled maintenance started.' },
+         { timestamp: new Date(Date.now() - 86460000).toISOString(), event: 'Sensor calibration failed diagnostics.' },
+    ]},
+    { id: 'BOT-06', status: BotStatus.Active, battery: 91, tasksCompleted: 130, location: 'Packing Area', history: [
+        { timestamp: new Date(Date.now() - 1200000).toISOString(), event: 'Delivered Item PID-001 to Packing Area.' },
+        { timestamp: new Date(Date.now() - 3000000).toISOString(), event: 'Task assigned: Deliver Item - Packing Area' },
+    ]},
+    { id: 'BOT-07', status: BotStatus.Idle, battery: 98, tasksCompleted: 102, location: 'Docking Bay', history: [
+        { timestamp: new Date(Date.now() - 7200000).toISOString(), event: 'Task queue empty. Returning to base.' },
+    ]},
+    { id: 'BOT-08', status: BotStatus.Charging, battery: 45, tasksCompleted: 121, location: 'Charging Station 1', history: [
+        { timestamp: new Date(Date.now() - 1800000).toISOString(), event: 'Battery level at 20%. Initiating charge cycle.' },
+    ]},
 ];
 
 export const STOCK_UTILIZATION_DATA: ChartData[] = [

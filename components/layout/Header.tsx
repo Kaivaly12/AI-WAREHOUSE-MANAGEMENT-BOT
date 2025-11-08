@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../../hooks/useTheme';
@@ -34,7 +33,7 @@ const Header: React.FC<HeaderProps> = ({ onLogout, onToggleSidebar }) => {
     }, []);
 
     return (
-        <header className="bg-light-card/80 dark:bg-dark-card/80 backdrop-blur-xl sticky top-0 md:top-4 md:mx-4 z-20 md:rounded-2xl border-b md:border border-white/20 dark:border-white/10">
+        <header className="relative z-10">
             <div className="flex items-center justify-between p-4">
                 <div className="flex items-center gap-2">
                      <button onClick={onToggleSidebar} className="lg:hidden p-2 -ml-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5">
